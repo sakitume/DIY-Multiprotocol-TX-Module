@@ -324,6 +324,18 @@ static void multi_send_status()
 	}
 #endif
 
+#if defined(BAYANG_HUB_TELEMETRY) && defined(MULTI_TELEMETRY)
+	void bayang_silverlite_frame()
+	{
+		const uint8_t *pData = packet_in;
+		uint8_t len = *pData++;
+		multi_send_header(MULTI_TELEMETRY_SILVERLITE, len);
+		for (uint8_t i = 0; i < len; i++)
+			Serial_write(*pData++);
+	}
+#endif
+
+
 #ifdef MULTI_TELEMETRY
 static void multi_send_frskyhub()
 {
@@ -944,6 +956,16 @@ void TelemetryUpdate()
 		{
 			receiver_channels_frame();
 			telemetry_link &= ~1;
+			return;
+		}
+	#endif
+
+	#if defined(BAYANG_HUB_TELEMETRY) && defined(MULTI_TELEMETRY)
+		// If Bayang with SilverLite telemetry
+		if ((protocol == PROTO_BAYANG) && (telemetry_link == 2))
+		{
+			bayang_silverlite_frame();
+			telemetry_link = 0;
 			return;
 		}
 	#endif

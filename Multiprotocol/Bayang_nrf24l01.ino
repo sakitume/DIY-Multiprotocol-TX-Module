@@ -45,6 +45,7 @@ enum BAYANG_FLAGS {
 enum BAYANG_OPTION_FLAGS {
 	BAYANG_OPTION_FLAG_TELEMETRY	= 0x01,
 	BAYANG_OPTION_FLAG_ANALOGAUX	= 0x02,
+	BAYANG_OPTION_FLAG_SILVERLITE = 0x04
 };
 
 static void __attribute__((unused)) BAYANG_send_packet()
@@ -86,8 +87,18 @@ static void __attribute__((unused)) BAYANG_send_packet()
 				packet[11] = 0x99;
 				break;
 			default:
-				packet[10] = rx_tx_addr[0];	// txid[0]
-				packet[11] = rx_tx_addr[1];	// txid[1]
+				if(option & BAYANG_OPTION_FLAG_SILVERLITE)
+				{
+					// Use special magic bytes to indicate to flight controller that this
+					// TX supports SilverLite extension.
+					packet[10] = packet[1] ^ 0xAA;
+					packet[11] = packet[2] ^ 0xAA;
+				}
+				else
+				{
+					packet[10] = rx_tx_addr[0];	// txid[0]
+					packet[11] = rx_tx_addr[1];	// txid[1]
+				}
 				break;
 		}
 	}
@@ -174,7 +185,15 @@ static void __attribute__((unused)) BAYANG_send_packet()
 			packet[13] = 0xED;
 			break;
 		default:
-			packet[12] = rx_tx_addr[2];	// txid[2]
+			if (option & BAYANG_OPTION_FLAG_SILVERLITE)
+			{
+				// packet[12] is used to indicate to flight controller that this TX is SilverLite capable
+				packet[12] = rx_tx_addr[2] ^ 0xAA;
+			}
+			else
+			{
+				packet[12] = rx_tx_addr[2];	// txid[2]
+			}
 			if (option & BAYANG_OPTION_FLAG_ANALOGAUX)
 			{	// Analog aux channel 2 (channel 15)
 				packet[13] = convert_channel_8b(CH15);
@@ -228,6 +247,21 @@ static void __attribute__((unused)) BAYANG_check_rx(void)
 			telemetry_counter++;
 			if(telemetry_lost==0)
 				telemetry_link=1;
+		}
+		else if ((packet[14] == check) && (packet[0] >= 0xA0) && (packet[0] <= 0xAF))
+		{
+			telemetry_counter++;
+			if (telemetry_lost==0)
+			{
+				telemetry_link = 2;	// 2 (instead of 1) to indicate this is a SilverLite telemetry packet 
+			}
+
+			// Copy the entire bayang packet (except for the checksum byte)
+			packet_in[0] = BAYANG_PACKET_SIZE-1;
+			for (uint8_t i=0; i<BAYANG_PACKET_SIZE-1; i++)
+			{
+				packet_in[i+1] = packet[i];
+			}
 		}
 	}
 	NRF24L01_SetTxRxMode(TXRX_OFF);
